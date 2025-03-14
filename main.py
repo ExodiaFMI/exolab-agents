@@ -3,13 +3,16 @@ from fastapi.openapi.utils import get_openapi
 from src.topics import router as topics_router  # Import the router
 from src.subtopics import router as subtopics_router
 from src.explanations import router as explanations_router
+from src.vectorization.embeddings import router as vectorization_router
 
 app = FastAPI()
 
 # Include the router from topics.py
-app.include_router(topics_router)
-app.include_router(subtopics_router)
-app.include_router(explanations_router)
+app.include_router(topics_router, tags=["Topic Generation"])
+app.include_router(subtopics_router, tags=["Topic Generation"])
+app.include_router(explanations_router, tags=["Topic Generation"])
+app.include_router(vectorization_router, tags=["Vectorization"])  # Add the new router under a new tag
+
 
 
 def custom_openapi():

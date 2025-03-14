@@ -15,11 +15,11 @@ Running the Service
 
 To start the FastAPI server, use the following command:
 
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+python3 -m uvicorn main:app --host 0.0.0.0 --port 6912 --workers 1
 
 	•	--host 0.0.0.0 → Allows access from any network.
-	•	--port 8000 → Runs the server on port 8000 (change if needed).
-	•	--workers 4 → Runs with 4 worker processes for better performance.
+	•	--port 6912 → Runs the server on port 6912 (change if needed).
+	•	--workers 1 → Runs with 1 worker processes for better performance.
 
 API Documentation
 
