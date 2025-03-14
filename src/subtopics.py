@@ -52,6 +52,6 @@ async def extract_lecture_subtopics(data: TopicsList):
     try:
         subtopics_list = await run_subtopic_extraction(data.topics)
         # Convert the dataclass instances to dicts for JSON serialization.
-        return {"result": [sub.__dict__ for sub in subtopics_list]}
+        return {"data": [sub.__dict__ for sub in subtopics_list]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
