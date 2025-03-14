@@ -4,6 +4,10 @@ from src.topics import router as topics_router  # Import the router
 from src.subtopics import router as subtopics_router
 from src.explanations import router as explanations_router
 from src.vectorization.embeddings import router as vectorization_router
+from src.questions.questions import router as questions_router
+from src.database.database import engine
+
+
 
 app = FastAPI()
 
@@ -11,9 +15,17 @@ app = FastAPI()
 app.include_router(topics_router, tags=["Topic Generation"])
 app.include_router(subtopics_router, tags=["Topic Generation"])
 app.include_router(explanations_router, tags=["Topic Generation"])
-app.include_router(vectorization_router, tags=["Vectorization"])  # Add the new router under a new tag
+app.include_router(vectorization_router, tags=["Vectorization"]) 
+app.include_router(questions_router, tags=["Questions"])
 
+@app.on_event("startup")
+async def startup():
+    print("Application is starting...")
 
+@app.on_event("shutdown")
+async def shutdown():
+    await engine.dispose()  # Close database connections on shutdown
+    print("Application is shutting down...")
 
 def custom_openapi():
     if app.openapi_schema:
@@ -21,7 +33,7 @@ def custom_openapi():
     openapi_schema = get_openapi(
         title="ExoLab Agents",
         version="0.0.0",
-        description="Here's a longer description of the custom **OpenAPI** schema",
+        description="Python Microservice, design to guide the ai agents used inside the **ExoLab Product**",
         routes=app.routes,
     )
     openapi_schema["info"]["x-logo"] = {
