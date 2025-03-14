@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from src.topics import router as topics_router  # Import the router
+from src.subtopics import router as subtopics_router
 
 app = FastAPI()
 
 # Include the router from topics.py
 app.include_router(topics_router)
+app.include_router(subtopics_router)
 
 
 def custom_openapi():

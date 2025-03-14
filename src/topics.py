@@ -11,10 +11,6 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
-@router.get("/topic/")
-async def read_topic():
-    return {"message": "This is the topic endpoint"}
-
 # Define the output data structure for lecture topics.
 @dataclass_json
 @dataclass
@@ -46,7 +42,7 @@ async def run_course_agent(content: str):
     return result.final_output.topics
 
 # Create a POST endpoint that accepts the lecture content and returns extracted topics.
-@router.post("/topic/extract")
+@router.post("/topics/extract")
 async def extract_lecture_topics(data: LectureContent):
     try:
         topics = await run_course_agent(data.content)
