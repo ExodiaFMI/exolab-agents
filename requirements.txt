@@ -1,3 +1,6 @@
 fastapi
 uvicorn
 openai
+openai-agents
+dataclasses
+dataclasses_json

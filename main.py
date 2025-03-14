@@ -1,18 +1,19 @@
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
+from src.topics import router as topics_router  # Import the router
 
 app = FastAPI()
 
-@app.get("/items/")
-async def read_items():
-    return [{"name": "Foo"}]
+# Include the router from topics.py
+app.include_router(topics_router)
+
 
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
     openapi_schema = get_openapi(
-        title="Custom title",
-        version="2.5.0",
+        title="ExoLab Agents",
+        version="0.0.0",
         description="Here's a longer description of the custom **OpenAPI** schema",
         routes=app.routes,
     )
