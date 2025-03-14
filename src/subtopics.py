@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 import asyncio
 from dataclasses import dataclass
 from agents import Agent, Runner, ModelSettings
@@ -42,13 +42,49 @@ async def run_subtopic_extraction(topics: list[str]) -> list[LectureSubtopicsOut
     results = await asyncio.gather(*tasks)
     return results
 
-# Define a request body model that accepts a list of topics.
+# Define a request body model that accepts a list of topics, with an example.
 class TopicsList(BaseModel):
     topics: list[str]
 
+    class Config:
+        schema_extra = {
+            "example": {
+                "topics": [
+                    "Cell theory/definition of life"
+                ]
+            }
+        }
+
 # Create a POST endpoint that accepts a list of topics and returns extracted subtopics.
-@router.post("/subtopics/extract")
-async def extract_lecture_subtopics(data: TopicsList):
+@router.post("/subtopics/extract", response_model=dict,
+             responses={
+                 200: {
+                     "content": {
+                         "application/json": {
+                             "example": {
+                                 "data": [
+                                     {
+                                         "topic": "Cell theory/definition of life",
+                                         "subtopics": [
+                                             "Historical development of cell theory",
+                                             "The three main tenets of cell theory",
+                                             "Comparison of prokaryotic and eukaryotic cells",
+                                             "Cell structure and function",
+                                             "The role of cells in multicellular organisms",
+                                             "Cell metabolism and energy production",
+                                             "Cell division: mitosis and meiosis",
+                                             "The relationship between cells and the definition of life",
+                                             "Applications of cell theory in modern biology",
+                                             "Implications of cell theory in medicine and biotechnology"
+                                         ]
+                                     }
+                                 ]
+                             }
+                         }
+                     }
+                 }
+             })
+async def extract_lecture_subtopics(data: TopicsList = Body(...)):
     try:
         subtopics_list = await run_subtopic_extraction(data.topics)
         # Convert the dataclass instances to dicts for JSON serialization.
