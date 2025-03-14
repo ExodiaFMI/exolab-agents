@@ -6,3 +6,4 @@ dataclasses
 dataclasses_json
 psycopg2
 numpy
+models
