@@ -66,7 +66,7 @@ class QuestionGenerationOutput:
 agent_questions = Agent(
     name="Question Generator",
     output_type=QuestionGenerationOutput,
-    model="gpt-4o-mini",
+    model="gpt-4o",
     model_settings=ModelSettings(temperature=0.7),
     instructions='''Write a detailed question on the given subtopic in Markdown format.
 

@@ -14,11 +14,12 @@ from langchain.sql_database import SQLDatabase
 from langchain.agents import create_sql_agent, initialize_agent, AgentType
 from langchain.agents.agent_toolkits import SQLDatabaseToolkit
 from langchain.tools import BaseTool
-from agents import Agent, Runner, ModelSettings, RunContextWrapper, FunctionTool
+from agents import Agent, Runner, ModelSettings, RunContextWrapper, FunctionTool, WebSearchTool
 from agents.agent_output import AgentOutputSchema
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, List
 from dataclasses_json import dataclass_json
+
 # Initialize FastAPI router
 router = APIRouter()
 
@@ -34,7 +35,6 @@ sync_connection = psycopg.connect(conn_info)
 
 table_name = "chat_history"
 PostgresChatMessageHistory.create_tables(sync_connection, table_name)
-
 
 def get_embedding(text: str):
     response = openai.embeddings.create(
@@ -58,25 +58,22 @@ def search_similar_subtopics(query_text: str, top_n: int = 3):
             results = cursor.fetchall()
     return results
 
-# Define the input schema for the tool.
+# Define the input schema for the query tool.
 class SubtopicQueryArgs(BaseModel):
     query: str
-    top_n: int 
+    top_n: int
 
-# Define the async function that will be invoked by the tool.
+# Define the async function that will be invoked by the query tool.
 async def run_subtopics_query(ctx: RunContextWrapper[Any], args: str) -> str:
-    # Parse the JSON arguments using pydantic.
+    # Parse the JSON arguments.
     parsed = SubtopicQueryArgs.model_validate_json(args)
-    # Run the query using the helper function.
     results = search_similar_subtopics(parsed.query, parsed.top_n)
-    # Format the results as a list of dictionaries.
+    # Format results as a list of dictionaries.
     formatted_results = [
         {"id": row[0], "name": row[1], "text": row[2], "topicId": row[3], "similarity": row[4]}
         for row in results
     ]
-    # Return the formatted results as a JSON string.
     return json.dumps(formatted_results)
-
 
 params_schema = SubtopicQueryArgs.model_json_schema()
 params_schema["additionalProperties"] = False
@@ -122,13 +119,50 @@ def get_conversation_context(session_id: str):
 
 def get_agent_input(session_id: str) -> str:
     """
-    Converts the conversation context into a plain text block to be passed as a prompt.
+    Converts the conversation context into a plain text block for the prompt.
     """
     conversation = get_conversation_context(session_id)
     context_str = "\n".join(
         f"{msg.__class__.__name__.replace('Message','')}: {msg.content}" for msg in conversation
     )
     return context_str
+
+# --- Dataclasses for Chat Agent Output ---
+@dataclass_json
+@dataclass
+class Source:
+    name: str
+    link: str
+    id: str
+
+@dataclass_json
+@dataclass
+class ChatReplyOutput:
+    message: str
+    sources: List[Source]
+
+output_schema = AgentOutputSchema(output_type=ChatReplyOutput)
+
+# --- Chat Agent Definition ---
+chat_agent = Agent(
+    name="Chat Assistant",
+    output_type=ChatReplyOutput,
+    model="gpt-4o",
+    tools=[subtopics_query_tool, WebSearchTool],
+    model_settings=ModelSettings(
+        temperature=0.7,
+    ),
+    instructions=(
+        "You are a helpful assistant. Based on the conversation context provided, produce a clear and helpful reply to the latest user message. "
+        "Return your answer as a JSON object with two keys: 'message' and 'sources'. 'message' should be your reply text, and 'sources' should be a list of objects, each containing 'name', 'link', and 'id'. "
+        "Include sources only if you have used the query tool to retrieve relevant information; otherwise, return an empty list for 'sources'."
+        "If not section info, search the interent for credible recourses and put their urls "
+    )
+)
+
+async def run_chat_agent(prompt: str) -> ChatReplyOutput:
+    result = await Runner.run(chat_agent, prompt)
+    return result.final_output
 
 # --- Pydantic Models for Chat Endpoints ---
 class ChatCreateRequest(BaseModel):
@@ -138,28 +172,6 @@ class ChatMessageRequest(BaseModel):
     session_id: str
     message: str
 
-# --- Chat Agent Definition ---
-# This agent is used to generate replies in our conversation endpoints.
-chat_agent = Agent(
-    name="Chat Assistant",
-    output_type=str,  # We expect plain text output.
-    model="gpt-4o",
-    tools=[
-        subtopics_query_tool
-    ],
-    model_settings=ModelSettings(
-        temperature=0.7,
-    ),
-    instructions=(
-        "You are a helpful assistant. Given the conversation context provided, "
-        "produce a clear and helpful reply to the latest user message. Use the subtopics tool if you found relevent info tell us the name of the subtopic that you used, and the id, in this format."
-    )
-)
-
-async def run_chat_agent(prompt: str) -> str:
-    result = await Runner.run(chat_agent, prompt)
-    return result.final_output
-
 # --- Endpoint: Create a New Chat Session ---
 @router.post("/chat/create")
 async def create_chat(chat_request: ChatCreateRequest):
@@ -168,7 +180,7 @@ async def create_chat(chat_request: ChatCreateRequest):
         session_id = str(uuid.uuid4())
         chat_history = get_chat_history(session_id)
         
-        # Initialize conversation summary memory using the valid summary_llm.
+        # Initialize conversation summary memory.
         summary_memories[session_id] = ConversationSummaryBufferMemory(
             llm=summary_llm,
             memory_key="summary",
@@ -192,22 +204,26 @@ async def create_chat(chat_request: ChatCreateRequest):
             {"output": ""}
         )
         
-        # Build conversation context and create the prompt for the agent.
+        # Build conversation context and create the prompt.
         context_text = get_agent_input(session_id)
         prompt = f"{context_text}\nUser: {chat_request.message}"
         
         # Run the chat agent.
-        ai_reply_text = await run_chat_agent(prompt)
-        reply_message = AIMessage(content=ai_reply_text)
+        ai_reply_output = await run_chat_agent(prompt)
+        # Only append the plain text reply to the conversation history.
+        reply_message = AIMessage(content=ai_reply_output.message)
         chat_history.add_messages([reply_message])
         summary_memories[session_id].save_context(
             {"input": chat_request.message},
-            {"output": ai_reply_text}
+            {"output": ai_reply_output.message}
         )
         
         return {
             "session_id": session_id,
-            "reply": ai_reply_text,
+            "reply": {
+                "message": ai_reply_output.message,
+                "sources": [source.__dict__ for source in ai_reply_output.sources]
+            },
             "history": [msg.content for msg in chat_history.messages]
         }
     except Exception as e:
@@ -241,24 +257,26 @@ async def chat_message(chat_request: ChatMessageRequest):
         prompt = f"{context_text}\nUser: {chat_request.message}"
         
         # Run the chat agent.
-        ai_reply_text = await run_chat_agent(prompt)
-        reply_message = AIMessage(content=ai_reply_text)
+        ai_reply_output = await run_chat_agent(prompt)
+        reply_message = AIMessage(content=ai_reply_output.message)
         chat_history.add_messages([reply_message])
         summary_memories[session_id].save_context(
             {"input": chat_request.message},
-            {"output": ai_reply_text}
+            {"output": ai_reply_output.message}
         )
         
         return {
             "session_id": session_id,
-            "reply": ai_reply_text,
+            "reply": {
+                "message": ai_reply_output.message,
+                "sources": [source.__dict__ for source in ai_reply_output.sources]
+            },
             "history": [msg.content for msg in chat_history.messages]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# --- Endpoint to retrieve messages for an existing chat session ---
+# --- Endpoint to Retrieve Messages for an Existing Chat Session ---
 @router.get("/chat/messages")
 def get_messages(session_id: str):
     try:
@@ -266,7 +284,6 @@ def get_messages(session_id: str):
         messages = chat_history.messages
         history = []
         for msg in messages:
-            # Determine the role based on the message type
             if isinstance(msg, SystemMessage):
                 role = "system"
             elif isinstance(msg, HumanMessage):
@@ -283,6 +300,7 @@ def get_messages(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
+# --- Endpoint: Query Subtopics ---
 class SubtopicQueryRequest(BaseModel):
     query: str
     top_n: int = 3
@@ -298,4 +316,3 @@ def query_subtopics(query_request: SubtopicQueryRequest):
         return {"results": formatted_results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    

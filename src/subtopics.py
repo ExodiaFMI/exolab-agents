@@ -21,7 +21,7 @@ output_schema_subtopics = AgentOutputSchema(output_type=LectureSubtopicsOutput)
 agent_subtopics = Agent(
     name="Subtopics Extractor", 
     output_type=LectureSubtopicsOutput,
-    model="gpt-4o-mini",
+    model="gpt-4o",
     model_settings=ModelSettings(
         temperature=0.1,
     ),

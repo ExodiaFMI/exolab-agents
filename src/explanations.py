@@ -25,7 +25,7 @@ class SubtopicExplanationOutput:
 agent_explanations = Agent(
     name="Subtopic Explainer",
     output_type=SubtopicExplanationOutput,
-    model="gpt-4o-mini",
+    model="gpt-4o",
     model_settings=ModelSettings(temperature=0.7),
     instructions='''Write a detailed explanation of the given subtopic in Markdown format.
    
@@ -39,7 +39,7 @@ agent_explanations = Agent(
 agent_explanation_redactor = Agent(
     name="Explanation Redactor",
     output_type=SubtopicExplanationOutput,
-    model="gpt-4o-mini",
+    model="gpt-4o",
     model_settings=ModelSettings(temperature=0.7),
     instructions='''You are provided with an explanation text along with a user prompt that specifies a change to be made.
     

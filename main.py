@@ -14,6 +14,7 @@ from src.images.images import router as images_router
 from src.videos.videos import router as videos_router
 from src.diagrams.diagrams import router as diagrams_router
 from src.chat.newchatagent import router as newchat_router
+from src.biolinks.biolinks import router as biolinks_router
 
 
 
@@ -31,6 +32,7 @@ app.include_router(images_router, tags=["Images"])
 app.include_router(videos_router, tags=["Videos"])
 app.include_router(diagrams_router, tags=["Diagrams"])
 # app.include_router(newchat_router, tags=["NewChat"])
+app.include_router(biolinks_router, tags=["Biolinks"])
 
 @app.on_event("startup")
 async def startup():
