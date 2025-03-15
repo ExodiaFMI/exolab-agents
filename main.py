@@ -12,6 +12,7 @@ from src.chat.chatagent import router as chatagent_router
 from src.recourses import router as recourses_router
 from src.images.images import router as images_router
 from src.videos.videos import router as videos_router
+from src.diagrams.diagrams import router as diagrams_router
 
 
 
@@ -27,6 +28,7 @@ app.include_router(questions_router, tags=["Questions"])
 app.include_router(chatagent_router, tags=["Chat"])
 app.include_router(images_router, tags=["Images"])
 app.include_router(videos_router, tags=["Videos"])
+app.include_router(diagrams_router, tags=["Diagrams"])
 
 @app.on_event("startup")
 async def startup():
