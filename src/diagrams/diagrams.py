@@ -48,6 +48,7 @@ agent_axodraw_o3 = Agent(
     model="o3-mini",
     instructions='''You are given a prompt related to physics, chemistry, or biology. Your task is to generate a complete LaTeX document that uses the axodraw2 package to create a diagram corresponding to the given prompt.
 
+
 The document must include:
 - A proper LaTeX preamble with the axodraw2 package.
 - The diagram inside a picture environment using axodraw2 commands.
@@ -56,7 +57,210 @@ The document must include:
   %% Diagram Size: WIDTH x HEIGHT
   where WIDTH and HEIGHT are numerical values in points (pt).
 
-Output only the raw LaTeX code as plain text (do not output in JSON format).'''
+Output only the raw LaTeX code as plain text (do not output in JSON format).
+
+Here is documentation: Below is a more structured summary of the Axodraw documentation, organized by topic and function. This overview captures the abstract, usage instructions, command reference, and several illustrative examples.
+
+⸻
+
+Axodraw Documentation Summary
+
+Axodraw is a LaTeX package that provides a set of PostScript drawing primitives. It is primarily used to draw Feynman diagrams, flow charts, and simple graphics—allowing whole articles (including pictures) to be exchanged in a single file. It relies on a PostScript interpreter (typically via dvips) and supports color (if the accompanying colordvi.sty is present).
+
+⸻
+
+1. Overview and Installation
+
+Abstract
+	•	Purpose:
+	•	Draw Feynman diagrams, flow charts, and simple graphics using LaTeX.
+	•	Integrate text and graphics in a single file.
+	•	Key Feature:
+	•	Uses PostScript for drawing commands.
+	•	Color Support:
+	•	Available if colordvi.sty is installed (default in most TeX distributions).
+	•	Note:
+	•	Earlier version was published in Comp. Phys. Comm. 83 (1994) 45.
+
+Installation & Basic Setup
+	•	Include Style File:
+Insert the style file in the document preamble, e.g.:
+
+\documentstyle[a4,11pt,axodraw]{article}
+
+
+	•	Dependencies:
+	•	The file epsf.sty (commonly available) is read by axodraw.sty.
+	•	colordvi.sty is optional; if missing, color commands won’t be active.
+	•	Compatibility:
+	•	Designed to work with dvips (from Radical Eye Software).
+	•	If using a different dvi-to-PostScript converter, syntax adjustments might be needed.
+
+⸻
+
+2. Using Axodraw in LaTeX
+	•	Drawing Environment:
+	•	Commands are executed inside a picture or figure environment.
+	•	Coordinates are given in points (1 inch = 72 points).
+	•	Scaling:
+	•	Scale transformations are available via \SetScale{}.
+	•	Note: Only PostScript text (using \PText) scales; regular LaTeX text does not.
+
+⸻
+
+3. Command Reference
+
+The Axodraw package provides numerous commands. Below is a categorized overview:
+
+3.1. Line and Arc Commands
+	•	Straight Lines:
+	•	\Line(x1,y1)(x2,y2)
+Draws a straight line.
+	•	\ArrowLine(x1,y1)(x2,y2)
+Line with an arrow in the middle.
+	•	\DashLine(x1,y1)(x2,y2){dashsize}
+Dashed line with specified dash length.
+	•	\LongArrow(x1,y1)(x2,y2)
+Line with an arrow at the end.
+	•	Arc Segments:
+	•	\ArrowArc(x,y)(r,φ1,φ2)
+Counterclockwise arc with an arrow in the middle.
+	•	\ArrowArcn(x,y)(r,φ1,φ2)
+Clockwise arc with an arrow in the middle.
+	•	\LongArrowArc(x,y)(r,φ1,φ2) / \LongArrowArcn(x,y)(r,φ1,φ2)
+Arc with an arrow at the end.
+	•	\DashArrowArc(x,y)(r,φ1,φ2){dashsize} / \DashArrowArcn(x,y)(r,φ1,φ2){dashsize}
+Dashed arc with an arrow.
+
+3.2. Gluon and Photon Commands
+	•	Gluons:
+	•	\Gluon(x1,y1)(x2,y2){amplitude}{windings}
+Draws a gluon line between two points.
+The amplitude (can be negative) influences the side on which the curls appear.
+	•	\GlueArc(x,y)(r,φ1,φ2){amplitude}{windings}
+Gluon drawn along an arc segment.
+	•	Photons:
+	•	\Photon(x1,y1)(x2,y2){amplitude}{wiggles}
+Photon line with wiggles between two points.
+	•	\PhotonArc(x,y)(r,φ1,φ2){amplitude}{wiggles}
+Photon drawn along an arc. For best symmetry, the number of wiggles is typically an integer plus 0.5.
+
+3.3. Dashed and Zigzag Commands
+	•	Dashed Curves:
+	•	\DashCurve{(x1,y1)(x2,y2)...(xn,yn)}{dashsize}
+Smooth dashed curve through a set of points.
+	•	Zigzag Lines:
+	•	\ZigZag(x1,y1)(x2,y2){amplitude}{wiggles}
+Draws a zigzag line with specified amplitude and number of oscillations.
+
+3.4. Box, Circle, and Oval Commands
+	•	Blanked Boxes/Circles (overwrite existing content):
+	•	\BBox(x1,y1)(x2,y2) and \BBoxc(x,y)(width,height)
+	•	\BCirc(x,y){r}
+	•	Colored Boxes/Circles:
+	•	\CBox(x1,y1)(x2,y2){color1}{color2}
+Box with border color color1 and background color2.
+	•	\CCirc(x,y){r}{color1}{color2}
+	•	\COval(x,y)(h,w)(φ){color1}{color2}
+Oval with rotation φ.
+	•	Gray Scale Boxes/Circles:
+	•	\GBox(x1,y1)(x2,y2){grayscale}, \GBoxc(x,y)(width,height){grayscale}
+	•	\GCirc(x,y){r}{grayscale}
+
+3.5. Text Commands
+	•	LaTeX Text:
+	•	\Text(x,y)[mode]{text}
+Places LaTeX text at a given focal point. Mode options (l, r, t, b, etc.) determine alignment.
+	•	\rText(x,y)[mode][rotation]{text}
+Rotated text (rotations: l = left 90°, r = right 90°, u = 180°).
+	•	PostScript Text (scalable):
+	•	\PText(x,y)(φ)[mode]{text}
+PostScript text; affected by scaling and color commands.
+	•	Text Boxes with Automatic Sizing:
+	•	One-line: \BText(x,y){text} and \CText(x,y){color1}{color2}{text}
+	•	Two-line: \B2Text(x,y){text1}{text2} and \C2Text(x,y){color1}{color2}{text1}{text2}
+
+3.6. Additional Utility Commands
+	•	Polygonal Shapes:
+	•	\BTri(x1,y1)(x2,y2)(x3,y3) and \CTri(x1,y1)(x2,y2)(x3,y3){color1}{color2}
+	•	Curves Through Points:
+	•	\Curve{(x1,y1)(x2,y2)...(xn,yn)}
+Fits a smooth curve (ensuring continuity in the first and second derivatives).
+	•	Axis Drawing for Graphs:
+	•	Linear Axis: \LinAxis(x1,y1)(x2,y2)(ND,d,hashsize,offset,width)
+	•	Logarithmic Axis: \LogAxis(x1,y1)(x2,y2)(NL,hashsize,offset,width)
+	•	Graphics Settings:
+	•	\SetColor{NameOfColor} – sets drawing color.
+	•	\SetPFont{fontname}{fontsize} – selects the PostScript font.
+	•	\SetScale{scalevalue} – scales graphics (text in PText scales, regular LaTeX text does not).
+	•	\SetOffset(x offset,y offset) – shifts coordinates at the LaTeX level.
+	•	\SetScaledOffset(x offset,y offset) – shifts coordinates after scaling.
+	•	\SetWidth{widthvalue} – sets line width.
+
+3.7. Conditional Color Command
+	•	\IfColor{arg1}{arg2}
+Executes arg1 if the color package (colordvi.sty) is present; otherwise, executes arg2.
+
+⸻
+
+4. Examples and Use Cases
+
+4.1. Text Modes
+
+Illustrates the effect of different alignment options in text commands. For instance, placing text with positions:
+	•	[lt] for left-top
+	•	[l] for left-center
+	•	[lb] for left-bottom
+…and so on, with small circles marking the focal points.
+
+4.2. Gluon Windings
+
+Demonstrates gluon lines with different numbers of windings (curl density).
+	•	Shows how varying the windings parameter (from 4 up to 8) alters the appearance.
+	•	Also illustrates the effect of positive versus negative amplitude in determining on which side the curls appear.
+
+4.3. Scaling
+
+Explains how to use \SetScale{} to change the overall size of the drawing.
+	•	Scaling may require adjustments to other parameters (e.g., amplitude or windings) to maintain visual appeal.
+	•	Note: Only PostScript text (using \PText) scales; TeX text remains fixed.
+
+4.4. Photons
+
+Guidelines for drawing photons:
+	•	Use an appropriate number of wiggles (often an integer plus 0.5) to achieve a symmetric appearance.
+	•	The sign of the amplitude influences whether wiggles start “up” or “down.”
+
+4.5. Flowcharts
+
+Combines boxes with text, arrows, and curves to create flowcharts.
+	•	Commands such as \BText, \C2Text, and various arrow commands are used.
+	•	Example flowcharts may illustrate an automatic computation system for cross-sections.
+
+4.6. Curves and Graphs
+
+Integrates curve fitting with axis drawing:
+	•	Uses \Curve for smooth interpolation between data points.
+	•	Accompanies with linear and logarithmic axis commands (\LinAxis and \LogAxis) for complete graphing.
+	•	Demonstrates labeling and arrow usage to annotate graphs (for example, representing threshold effects in particle production).
+
+4.7. A Playful Example
+
+A short example combining several elements (lines, gluons, photons, zigzags, and ovals) to showcase mixed usage in one picture.
+
+⸻
+
+5. Additional Information
+	•	Acknowledgement:
+The author thanks G.J. van Oldenborgh for assistance with some of the TeX macros.
+	•	Obtaining Axodraw:
+The package can be downloaded from the FORM homepage:
+http://nikhef.nl/~form
+Suggestions and commentary should be sent to t68@nikhef.nl.
+
+⸻
+
+This structured summary should help you navigate the various features and commands of Axodraw more easily while serving as a quick reference to its usage and examples.'''
 )
 
 limiter = AsyncLimiter(max_rate=60, time_period=60)
