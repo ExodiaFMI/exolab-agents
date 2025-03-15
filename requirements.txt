@@ -5,5 +5,9 @@ openai-agents
 dataclasses
 dataclasses_json
 psycopg2
+pydantic
 numpy
 models
+langchain_core
+langchain_postgres
+langchain_community

@@ -11,44 +11,53 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
-# Define the output data structure for lecture topics.
+# Updated output data structure to include topics, description, and reading materials.
 @dataclass_json
 @dataclass
-class LectureTopicsOutput:
+class CourseContentOutput:
     topics: list[str]
+    description: str
+    reading_materials: list[str]
 
-output_schema = AgentOutputSchema(output_type=LectureTopicsOutput)
+output_schema = AgentOutputSchema(output_type=CourseContentOutput)
 
-# Create an Agent with the necessary settings and instructions.
+# Updated Agent instructions to extract the additional fields.
 agent = Agent(
     name="Course Schedule Extractor", 
-    output_type=LectureTopicsOutput,
-    model="gpt-4o-mini",
+    output_type=CourseContentOutput,
+    model="gpt-4o",
     model_settings=ModelSettings(
         temperature=0.1,
     ),
-    instructions='''Extract only the lecture topics from the following schedule,
-              excluding exams, holidays, non-course material, course introductions, discussion events, etc.
-              Output the result as a JSON list where each entry is a topic name'''
+    instructions='''Extract the following details from the provided course schedule:
+1. Lecture topics as a JSON list of strings (exclude exams, holidays, non-course material, course introductions, discussion events, etc.).
+2. A short description of the course summarizing its content.
+3. Reading materials as a JSON array of strings containing recommended texts.
+Output the result as a JSON object with the keys "topics", "description", and "reading_materials".'''
 )
 
-# Define a request body model that accepts the content, with an example.
+# Updated request body model with an example including the additional details.
 class LectureContent(BaseModel):
     content: str
 
     class Config:
         schema_extra = {
             "example": {
-                "content": "May 23: Course Introduction; Cell theory/definition of life; Chemistry of Life\n\t•\tMay 24: Nucleic Acids"
+                "content": (
+                    "May 23: Course Introduction; Cell theory/definition of life; Chemistry of Life\n"
+                    "May 24: Nucleic Acids; Carbohydrates\n"
+                    "Course Description: This course covers the fundamentals of biology and chemistry in living organisms.\n"
+                    "Reading Materials: 'Biology 101', 'Chemistry Basics'"
+                )
             }
         }
 
 # Define an async function that runs the agent with the provided content.
 async def run_course_agent(content: str):
     result = await Runner.run(agent, content)
-    return result.final_output.topics
+    return result.final_output
 
-# Create a POST endpoint that accepts the lecture content and returns extracted topics.
+# Create a POST endpoint that accepts the lecture content and returns extracted details.
 @router.post("/topics/extract", response_model=dict, 
              responses={
                  200: {
@@ -56,10 +65,14 @@ async def run_course_agent(content: str):
                          "application/json": {
                              "example": {
                                  "topics": [
-                                    "Cell theory/definition of life",
-                                    "Chemistry of Life",
-                                    "Nucleic Acids",
-                    
+                                     "Cell theory/definition of life",
+                                     "Chemistry of Life",
+                                     "Nucleic Acids"
+                                 ],
+                                 "description": "This course covers the fundamentals of biology and chemistry in living organisms.",
+                                 "reading_materials": [
+                                     "Biology 101",
+                                     "Chemistry Basics"
                                  ]
                              }
                          }
@@ -68,12 +81,12 @@ async def run_course_agent(content: str):
              })
 async def extract_lecture_topics(data: LectureContent = Body(...)):
     """
-    Extract lecture topics from the provided schedule.
+    Extract lecture topics, a course description, and reading materials from the provided schedule.
 
     **Request Example:**
     ```json
     {
-        "content": "May 23: Course Introduction; Cell theory/definition of life; Chemistry of Life\n\t•\tMay 24: Nucleic Acids; Carbohydrates"
+        "content": "May 23: Course Introduction; Cell theory/definition of life; Chemistry of Life\nMay 24: Nucleic Acids; Carbohydrates\nCourse Description: This course covers the fundamentals of biology and chemistry in living organisms.\nReading Materials: 'Biology 101', 'Chemistry Basics'"
     }
     ```
 
@@ -83,19 +96,22 @@ async def extract_lecture_topics(data: LectureContent = Body(...)):
         "topics": [
             "Cell theory/definition of life",
             "Chemistry of Life",
-            "Nucleic Acids",
-            "Carbohydrates",
-            "Proteins",
-            "Enzyme Regulation & Kinetics",
-            "Lipids & Fats",
-            "Characteristics of Living Cells",
-            "Fluid Mosaic Model; Channels, Receptors, Transport Proteins",
+            "Nucleic Acids"
+        ],
+        "description": "This course covers the fundamentals of biology and chemistry in living organisms.",
+        "reading_materials": [
+            "Biology 101",
+            "Chemistry Basics"
         ]
     }
     ```
     """
     try:
-        topics = await run_course_agent(data.content)
-        return {"topics": topics}
+        output = await run_course_agent(data.content)
+        return {
+            "topics": output.topics,
+            "description": output.description,
+            "reading_materials": output.reading_materials
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

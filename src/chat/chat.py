@@ -46,12 +46,15 @@ Output a JSON object with "role" as "assistant" and "content" containing the res
 '''
 )
 
+# Define a model for get messages request
+class ChatHistoryRequest(BaseModel):
+    session_id: str
+
 # Initialize FastAPI router
 router = APIRouter()
 
 async def generate_chat_response(history: List[ChatMessage], user_message: str) -> ChatResponse:
     """Generate a chat response based on conversation history and the latest user message."""
-    
     # Format conversation history as context
     chat_history = "\n".join([f"{msg.role.capitalize()}: {msg.content}" for msg in history])
     prompt_context = f"""
@@ -61,7 +64,6 @@ Previous Conversation:
 User: {user_message}
 Assistant:
 """
-    
     result = await Runner.run(agent_chat, prompt_context)
     return result.final_output
 
@@ -110,3 +112,44 @@ async def chat(request: ChatRequest = Body(...)):
         return {"response": response.__dict__}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/chat/getmessages")
+def get_messages(request: ChatHistoryRequest = Body(...)):
+    """
+    Get chat messages for a given session.
+    
+    **Request Example:**
+    ```json
+    {
+        "session_id": "some-session-id"
+    }
+    ```
+    
+    **Response Example:**
+    ```json
+    {
+        "session_id": "some-session-id",
+        "messages": [
+            "First message content",
+            "Second message content"
+        ]
+    }
+    ```
+    """
+    session_id = request.session_id
+    try:
+        chat_history = get_chat_history(session_id)
+        # Return all messages in the order they were stored
+        messages = [msg.content for msg in chat_history.messages]
+        return {"session_id": session_id, "messages": messages}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+def get_chat_history(session_id: str):
+    # Implement the logic to retrieve chat history for the given session_id.
+    # This is just an example implementation.
+    class ChatHistory:
+        def __init__(self, messages):
+            self.messages = messages
+    # Replace with actual messages retrieval logic.
+    return ChatHistory(messages=[])
