@@ -9,7 +9,6 @@ from src.subtopics import router as subtopics_router
 from src.explanations import router as explanations_router
 from src.vectorization.embeddings import router as vectorization_router
 from src.questions.questions import router as questions_router
-from src.chat.chat import router as chat_router
 from src.chat.chatagent import router as chatagent_router
 
 
@@ -22,7 +21,6 @@ app.include_router(subtopics_router, tags=["Topic Generation"])
 app.include_router(explanations_router, tags=["Topic Generation"])
 app.include_router(vectorization_router, tags=["Vectorization"]) 
 app.include_router(questions_router, tags=["Questions"])
-# app.include_router(chat_router, tags=["Chat"])
 app.include_router(chatagent_router, tags=["Chat"])
 
 @app.on_event("startup")
