@@ -59,6 +59,8 @@ The document must include:
 
 Output only the raw LaTeX code as plain text (do not output in JSON format).
 
+BE CAREFULL: USE SPACE BETWEEN DIFFERENT ITEMS, BECUASE RIGHT NOW YOUR RESULTS ARE TOO CLOSE TO EACHOTHER
+
 Here is documentation: Below is a more structured summary of the Axodraw documentation, organized by topic and function. This overview captures the abstract, usage instructions, command reference, and several illustrative examples.
 
 ⸻
