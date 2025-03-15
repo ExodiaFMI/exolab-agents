@@ -11,14 +11,14 @@ from agents.agent_output import AgentOutputSchema
 from pydantic import BaseModel
 from aiolimiter import AsyncLimiter  # Rate limiter
 
-# --- Existing code for axodraw diagram generation ---
-
+# --- Dataclass for diagram output ---
 @dataclass
 class AxodrawDiagramOutput:
     document_content: str
     diagram_width: float  # Width in points (pt)
     diagram_height: float  # Height in points (pt)
 
+# --- Original agent (for reference) ---
 agent_axodraw = Agent(
     name="Axodraw Diagram Generator",
     output_type=AxodrawDiagramOutput,
@@ -41,14 +41,45 @@ Output your result as a JSON object with the following keys:
 Do not include any additional keys or commentary.'''
 )
 
+# --- New agent using o3-mini (plain text output) ---
+agent_axodraw_o3 = Agent(
+    name="Axodraw Diagram Generator (o3-mini)",
+    output_type=str,  # Plain text output
+    model="o3-mini",
+    instructions='''You are given a prompt related to physics, chemistry, or biology. Your task is to generate a complete LaTeX document that uses the axodraw2 package to create a diagram corresponding to the given prompt.
+
+The document must include:
+- A proper LaTeX preamble with the axodraw2 package.
+- The diagram inside a picture environment using axodraw2 commands.
+- A clearly defined diagram of an appropriate size.
+- At the very end of the document, include a comment in the following format:
+  %% Diagram Size: WIDTH x HEIGHT
+  where WIDTH and HEIGHT are numerical values in points (pt).
+
+Output only the raw LaTeX code as plain text (do not output in JSON format).'''
+)
+
 limiter = AsyncLimiter(max_rate=60, time_period=60)
 
-async def generate_axodraw_diagram(prompt: str) -> AxodrawDiagramOutput:
+# --- Helper function: Parse plain text output into a JSON-like object ---
+def parse_axodraw_output(output: str) -> AxodrawDiagramOutput:
+    # Look for the diagram size comment in the output text.
+    match = re.search(r"%%\s*Diagram Size:\s*([\d.]+)\s*x\s*([\d.]+)", output)
+    if not match:
+        raise ValueError("Diagram size comment not found in the output.")
+    width = float(match.group(1))
+    height = float(match.group(2))
+    return AxodrawDiagramOutput(document_content=output, diagram_width=width, diagram_height=height)
+
+# --- Async function using o3-mini model ---
+async def generate_axodraw_diagram_o3(prompt: str) -> AxodrawDiagramOutput:
     prompt_context = f"Prompt: {prompt}"
     async with limiter:
-        result = await Runner.run(agent_axodraw, prompt_context)
-    return result.final_output
+        result = await Runner.run(agent_axodraw_o3, prompt_context)
+    # result.final_output is plain text; parse it to extract dimensions.
+    return parse_axodraw_output(result.final_output)
 
+# --- Request model ---
 class AxodrawDiagramRequest(BaseModel):
     prompt: str
 
@@ -59,26 +90,18 @@ class AxodrawDiagramRequest(BaseModel):
             }
         }
 
-# Original endpoint (for reference)
 router = APIRouter()
 
+# --- Endpoint using the o3-mini–generated document ---
 @router.post("/diagram/generate", response_model=dict,
-             responses={
-                 200: {
-                     "content": {
-                         "application/json": {
-                             "example": {
-                                 "document_content": "% LaTeX document content with axodraw2 diagram...",
-                                 "diagram_width": 300,
-                                 "diagram_height": 200
-                             }
-                         }
-                     }
-                 }
-             })
+             responses={200: {"content": {"application/json": {"example": {
+                 "document_content": "% LaTeX document content...",
+                 "diagram_width": 300,
+                 "diagram_height": 200
+             }}}}})
 async def generate_diagram(request: AxodrawDiagramRequest = Body(...)):
     try:
-        diagram_output = await generate_axodraw_diagram(request.prompt)
+        diagram_output = await generate_axodraw_diagram_o3(request.prompt)
         return {
             "document_content": diagram_output.document_content,
             "diagram_width": diagram_output.diagram_width,
@@ -89,7 +112,6 @@ async def generate_diagram(request: AxodrawDiagramRequest = Body(...)):
 
 # --- Helper functions and constants for LaTeX to PNG conversion ---
 
-# File and conversion settings
 TEX_FILE = "mydiagram.tex"
 PDF_FILE = "mydiagram.pdf"
 PNG_FILE = "mydiagram.png"
@@ -111,7 +133,7 @@ def compile_latex():
     run_command(["pdflatex", TEX_FILE])
 
 def get_page_size(pdf_file):
-    """Use pdfinfo to extract page width and height (in points) from the PDF."""
+    """Extract page dimensions from the PDF using pdfinfo."""
     try:
         result = subprocess.run(["pdfinfo", pdf_file], capture_output=True, text=True, check=True)
     except subprocess.CalledProcessError:
@@ -134,6 +156,7 @@ def get_diagram_size(tex_file):
     if not match:
         print("Error: Diagram size comment not found in the TeX file.")
         sys.exit(1)
+    # Adjusting the dimensions if needed (here adding 200 to each)
     diag_width = float(match.group(1)) + 200
     diag_height = float(match.group(2)) + 200
     print(f"Diagram size (from .tex): {diag_width} x {diag_height} pts")
@@ -185,30 +208,22 @@ def cleanup_temp_files():
             print(f"Removing {file}")
             os.remove(file)
 
-# --- New endpoint for generating PNG of the diagram ---
-
 @router.post("/diagram/generate/png", response_class=FileResponse,
-             responses={200: {
-                 "content": {
-                     "image/png": {
-                         "example": "binary PNG data"
-                     }
-                 }
-             }})
+             responses={200: {"content": {"image/png": {"example": "binary PNG data"}}}})
 async def generate_diagram_png(request: AxodrawDiagramRequest = Body(...)):
     """
-    Generate a LaTeX document with an axodraw2 diagram based on the provided prompt,
+    Generate a LaTeX document with an axodraw2 diagram using the o3-mini model,
     compile it into a PDF, convert and crop the PDF to a PNG image, and return the PNG.
     """
     try:
-        # 1. Use the existing agent to generate the LaTeX document and diagram dimensions.
-        diagram_output = await generate_axodraw_diagram(request.prompt)
+        # 1. Use the o3-mini agent to generate the LaTeX document.
+        diagram_output = await generate_axodraw_diagram_o3(request.prompt)
         
-        # 2. Write the LaTeX content (which must include the diagram size comment)
+        # 2. Write the LaTeX content to file.
         with open(TEX_FILE, "w") as f:
             f.write(diagram_output.document_content)
         
-        # 3. Compile the LaTeX document to generate the PDF.
+        # 3. Compile the LaTeX document.
         compile_latex()
         
         # 4. Get the page dimensions from the generated PDF.
@@ -217,7 +232,7 @@ async def generate_diagram_png(request: AxodrawDiagramRequest = Body(...)):
         # 5. Retrieve the diagram dimensions from the TeX file.
         diag_width, diag_height = get_diagram_size(TEX_FILE)
         
-        # 6. Convert the PDF to a cropped PNG using the helper function.
+        # 6. Convert the PDF to a cropped PNG.
         convert_pdf_to_png(PDF_FILE, PNG_FILE, diag_width, diag_height, page_width)
         print(f"PNG created: {PNG_FILE}")
         
