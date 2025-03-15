@@ -3,13 +3,13 @@ from fastapi.openapi.utils import get_openapi
 from src.database.database import engine
 
 
-
 from src.topics import router as topics_router
 from src.subtopics import router as subtopics_router
 from src.explanations import router as explanations_router
 from src.vectorization.embeddings import router as vectorization_router
-from src.questions.questions import router as questions_router
+from src.questions.questions import router as questions_router  
 from src.chat.chatagent import router as chatagent_router
+from src.recourses import router as recourses_router
 
 
 
@@ -19,6 +19,7 @@ app = FastAPI()
 app.include_router(topics_router, tags=["Topic Generation"])
 app.include_router(subtopics_router, tags=["Topic Generation"])
 app.include_router(explanations_router, tags=["Topic Generation"])
+app.include_router(recourses_router, tags=["Topic Generation"])
 app.include_router(vectorization_router, tags=["Vectorization"]) 
 app.include_router(questions_router, tags=["Questions"])
 app.include_router(chatagent_router, tags=["Chat"])
