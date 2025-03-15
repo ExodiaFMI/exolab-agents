@@ -16,26 +16,22 @@ LATEX_CONTENT = r"""
 \documentclass{article}
 \usepackage{axodraw2}
 \begin{document}
-\thispagestyle{empty}
-
 \begin{center}
-\begin{axopicture}(150,100)
-    % Gluon lines
-    \Gluon(0,50)(50,50){3}{5}
-    \Gluon(50,50)(100,80){3}{5}
-    \Gluon(50,50)(100,20){3}{5}
-    
-    % Vertices
-    \Vertex(50,50){2}
-    
-    % Labels
-    \Text(0,55)[b]{\(g_1\)}
-    \Text(100,85)[b]{\(g_2\)}
-    \Text(100,15)[t]{\(g_3\)}
-\end{axopicture}
+\begin{picture}(300,56)(0,0)
+  \SetColor{Blue}
+  \Line(100,25)(150,25)
+  \SetColor{Green}
+  \Gluon(150,25)(200,25){3}{6}
+  \SetColor{Red}
+  \Photon(150,35)(200,45){3}{6}
+  \SetColor{Mahogany}
+  \ZigZag(150,15)(200,5){3}{6}
+  \IfColor
+    {\COval(150,25)(20,10)(0){Black}{Yellow}}
+    {\GOval(150,25)(20,10)(0){0.5}}
+\end{picture}
 \end{center}
-
-%% Diagram Size: 150 x 100
+%% Diagram Size: 150 x 250
 \end{document}
 """
 
