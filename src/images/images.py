@@ -53,7 +53,7 @@ async def generate_image(request: ImageRequest = Body(...)):
             model="dall-e-3",  # optionally, specify the model (e.g., "dall-e-3")
             prompt=full_prompt,
             n=1,
-            size="512x512"
+            size="1024x1024"
         )
         
         # Extract the URL of the generated image from the pydantic model response
