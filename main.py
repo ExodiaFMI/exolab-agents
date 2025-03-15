@@ -30,7 +30,7 @@ app.include_router(chatagent_router, tags=["Chat"])
 app.include_router(images_router, tags=["Images"])
 app.include_router(videos_router, tags=["Videos"])
 app.include_router(diagrams_router, tags=["Diagrams"])
-app.include_router(newchat_router, tags=["NewChat"])
+# app.include_router(newchat_router, tags=["NewChat"])
 
 @app.on_event("startup")
 async def startup():
