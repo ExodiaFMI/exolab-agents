@@ -10,6 +10,16 @@ from langchain_postgres import PostgresChatMessageHistory
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationSummaryBufferMemory
 
+# NEW: Imports for SQL agent
+from langchain.sql_database import SQLDatabase
+from langchain.agents import create_sql_agent, initialize_agent, AgentType
+from langchain.agents.agent_toolkits import SQLDatabaseToolkit
+import openai
+from langchain.tools import BaseTool
+
+
+
+
 # Initialize FastAPI router
 router = APIRouter()
 
@@ -206,5 +216,82 @@ def get_messages(session_id: str):
             "session_id": session_id,
             "history": history
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+
+def get_embedding(text: str):
+    response = openai.embeddings.create(
+        model="text-embedding-ada-002",
+        input=text
+    )
+    # Extract the vector from the response.
+    return response.data[0].embedding
+
+def search_similar_subtopics(query_text: str, top_n: int = 3):
+    query_vector = get_embedding(query_text)
+    with psycopg.connect(conn_info) as conn:
+        with conn.cursor() as cursor:
+            sql = """
+            SELECT id, name, text, "topicId", (embedding::vector) <#> %s::vector AS similarity
+            FROM subtopics
+            ORDER BY similarity
+            LIMIT %s;
+            """
+            cursor.execute(sql, (query_vector, top_n))
+            results = cursor.fetchall()
+    return results
+
+class SubtopicQueryRequest(BaseModel):
+    query: str
+    top_n: int = 3
+
+@router.post("/chat/query_subtopics")
+def query_subtopics(query_request: SubtopicQueryRequest):
+    try:
+        results = search_similar_subtopics(query_request.query, query_request.top_n)
+        formatted_results = [
+            {"id": row[0], "name": row[1], "text": row[2], "topicId": row[3], "similarity": row[4]}
+            for row in results
+        ]
+        return {"results": formatted_results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+class SubtopicsQueryTool(BaseTool):
+    name: str = "SubtopicsQueryTool"
+    description: str = (
+        "Useful for querying the subtopics table to find similar subtopics based on a natural language query. "
+        "Input should be a query string, and it returns the query results as a string."
+    )
+
+    def _run(self, query: str) -> str:
+        results = search_similar_subtopics(query, top_n=3)
+        formatted_results = [
+            {"id": row[0], "name": row[1], "text": row[2], "topicId": row[3], "similarity": row[4]}
+            for row in results
+        ]
+        return str(formatted_results)
+
+    async def _arun(self, query: str) -> str:
+        raise NotImplementedError("Async not implemented")
+
+
+@router.post("/chat/query_subtopics_agent")
+def query_subtopics_agent(query_request: SubtopicQueryRequest):
+    try:
+        # Create an instance of the custom tool.
+        tool = SubtopicsQueryTool()
+        # Initialize a zero-shot agent with the custom tool.
+        agent = initialize_agent(
+            tools=[tool],
+            llm=llm,
+            agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+            verbose=False
+        )
+        # Run the agent with the provided natural language query.
+        result = agent.run(query_request.query)
+        return {"result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
