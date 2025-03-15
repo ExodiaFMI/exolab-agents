@@ -5,6 +5,7 @@ from agents import Agent, Runner, ModelSettings
 from agents.agent_output import AgentOutputSchema
 from dataclasses_json import dataclass_json
 from pydantic import BaseModel
+from aiolimiter import AsyncLimiter  # Import the rate limiter
 
 router = APIRouter()
 
@@ -29,10 +30,16 @@ agent_subtopics = Agent(
               and "subtopics" as a list of subtopics.'''
 )
 
+# Create an AsyncLimiter instance.
+# For example, if you want to allow 60 requests per minute:
+limiter = AsyncLimiter(max_rate=60, time_period=60)
+
 # Define an async function that runs the agent for a single topic.
 async def extract_subtopics(topic: str) -> LectureSubtopicsOutput:
     """Run the agent to extract subtopics for a given topic."""
-    result = await Runner.run(agent_subtopics, topic)
+    # Acquire the rate limiter before making the API call.
+    async with limiter:
+        result = await Runner.run(agent_subtopics, topic)
     return result.final_output
 
 # Define a helper function to run subtopic extraction in parallel.

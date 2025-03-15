@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from agents import Agent, Runner, ModelSettings
 from agents.agent_output import AgentOutputSchema
 from pydantic import BaseModel
+from aiolimiter import AsyncLimiter  # Import the rate limiter
 
 # For the purpose of this endpoint, we define a simple Pydantic model representing a lecture subtopics item.
 class LectureSubtopicsOutputModel(BaseModel):
@@ -47,6 +48,10 @@ Your task is to produce a revised version of the explanation where you only modi
 Output the result as a JSON object with "topic", "subtopic", and "explanation".'''
 )
 
+# Create an AsyncLimiter instance.
+# For example, if you want to allow 60 requests per minute:
+limiter = AsyncLimiter(max_rate=60, time_period=60)
+
 # Async function to generate an explanation for a given subtopic.
 async def generate_explanation(topic: str, subtopic: str, other_subtopics: list[str]) -> SubtopicExplanationOutput:
     """Generate a detailed explanation for a given subtopic while avoiding other subtopics."""
@@ -55,7 +60,9 @@ async def generate_explanation(topic: str, subtopic: str, other_subtopics: list[
     Subtopic: {subtopic}
     Other Subtopics: {', '.join(other_subtopics)}
     """
-    result = await Runner.run(agent_explanations, prompt_context)
+    # Acquire the rate limiter before making the API call.
+    async with limiter:
+        result = await Runner.run(agent_explanations, prompt_context)
     return result.final_output
 
 # Async function to redact an explanation based on a user prompt.
@@ -75,7 +82,9 @@ async def redact_explanation(
     
     Revise the explanation by modifying only the part requested by the user, leaving the rest unchanged.
     """
-    result = await Runner.run(agent_explanation_redactor, prompt_context)
+    # Acquire the rate limiter before making the API call.
+    async with limiter:
+        result = await Runner.run(agent_explanation_redactor, prompt_context)
     return result.final_output
 
 # Helper function to run explanation generation in parallel.

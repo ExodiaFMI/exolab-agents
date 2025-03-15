@@ -10,6 +10,8 @@ from src.vectorization.embeddings import router as vectorization_router
 from src.questions.questions import router as questions_router  
 from src.chat.chatagent import router as chatagent_router
 from src.recourses import router as recourses_router
+from src.images.images import router as images_router
+from src.videos.videos import router as videos_router
 
 
 
@@ -23,6 +25,8 @@ app.include_router(recourses_router, tags=["Topic Generation"])
 app.include_router(vectorization_router, tags=["Vectorization"]) 
 app.include_router(questions_router, tags=["Questions"])
 app.include_router(chatagent_router, tags=["Chat"])
+app.include_router(images_router, tags=["Images"])
+app.include_router(videos_router, tags=["Videos"])
 
 @app.on_event("startup")
 async def startup():

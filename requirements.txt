@@ -11,3 +11,6 @@ models
 langchain_core
 langchain_postgres
 langchain_community
+tokenizer
+aiolimiter
+ptiktoken
