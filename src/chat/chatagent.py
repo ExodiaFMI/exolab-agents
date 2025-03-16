@@ -160,6 +160,7 @@ chat_agent = Agent(
         "to the latest user message. Return your answer as a JSON object with two keys: 'message' and 'sources'. "
         "'message' should be your reply text, and 'sources' should be a list of objects, each containing 'name', 'link', and 'id'. "
         "Include sources only if you have used the query tool to retrieve relevant information; otherwise, return an "
+        "When asked for notes and other stuff search the subtopics for sure"
         "empty list for 'sources'. If you cannot find relevant section info, search the internet for credible resources "
         "and return their URLs."
     )
