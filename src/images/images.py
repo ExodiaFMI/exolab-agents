@@ -5,6 +5,7 @@ from dataclasses_json import dataclass_json
 from pydantic import BaseModel
 from openai import OpenAI 
 from agents import Agent, Runner, ModelSettings, WebSearchTool
+# from bing_image_urls import bing_image_urls
 
 router = APIRouter()
 
@@ -127,5 +128,12 @@ async def search_image(data: ImageSearchRequest = Body(...)):
     try:
         output = await run_image_search_agent(data.prompt)
         return {"image_url": output.image_url}
+
+
+        # Fetch image URLs
+        # urls = bing_image_urls('example search', limit=1)
+        # return  {"image_url": urls[0]}
+            
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

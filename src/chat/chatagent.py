@@ -148,7 +148,7 @@ chat_agent = Agent(
     name="Chat Assistant",
     output_type=ChatReplyOutput,
     model="gpt-4o",
-    tools=[subtopics_query_tool, WebSearchTool],
+    tools=[subtopics_query_tool, WebSearchTool()],
     model_settings=ModelSettings(
         temperature=0.7,
     ),
