@@ -4,21 +4,20 @@ import psycopg
 import json
 import asyncio
 import openai
+from typing import Optional, Any, List
+from dataclasses import dataclass
+from dataclasses_json import dataclass_json
+
 from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel
+
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 from langchain_postgres import PostgresChatMessageHistory
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationSummaryBufferMemory
-from langchain.sql_database import SQLDatabase
-from langchain.agents import create_sql_agent, initialize_agent, AgentType
-from langchain.agents.agent_toolkits import SQLDatabaseToolkit
-from langchain.tools import BaseTool
+
 from agents import Agent, Runner, ModelSettings, RunContextWrapper, FunctionTool, WebSearchTool
 from agents.agent_output import AgentOutputSchema
-from dataclasses import dataclass
-from typing import Any, List
-from dataclasses_json import dataclass_json
 
 # Initialize FastAPI router
 router = APIRouter()
@@ -41,7 +40,6 @@ def get_embedding(text: str):
         model="text-embedding-ada-002",
         input=text
     )
-    # Extract the vector from the response.
     return response.data[0].embedding
 
 def search_similar_subtopics(query_text: str, top_n: int = 3):
@@ -58,19 +56,23 @@ def search_similar_subtopics(query_text: str, top_n: int = 3):
             results = cursor.fetchall()
     return results
 
-# Define the input schema for the query tool.
+# Define the input schema for the query tool
 class SubtopicQueryArgs(BaseModel):
     query: str
     top_n: int
 
-# Define the async function that will be invoked by the query tool.
+# Define the async function that will be invoked by the query tool
 async def run_subtopics_query(ctx: RunContextWrapper[Any], args: str) -> str:
-    # Parse the JSON arguments.
     parsed = SubtopicQueryArgs.model_validate_json(args)
     results = search_similar_subtopics(parsed.query, parsed.top_n)
-    # Format results as a list of dictionaries.
     formatted_results = [
-        {"id": row[0], "name": row[1], "text": row[2], "topicId": row[3], "similarity": row[4]}
+        {
+            "id": row[0], 
+            "name": row[1], 
+            "text": row[2], 
+            "topicId": row[3], 
+            "similarity": row[4]
+        }
         for row in results
     ]
     return json.dumps(formatted_results)
@@ -82,7 +84,7 @@ subtopics_query_tool = FunctionTool(
     name="query_subtopics",
     description=(
         "Queries the subtopics table to find similar subtopics based on a natural language query. "
-        "Input should be a JSON with 'query' and an optional 'top_n' (default 3)."
+        "Input should be a JSON with 'query' and 'top_n'."
     ),
     params_json_schema=params_schema,
     on_invoke_tool=run_subtopics_query,
@@ -91,7 +93,7 @@ subtopics_query_tool = FunctionTool(
 # --- Global Conversation Memory Dictionary ---
 summary_memories = {}
 
-# Create a separate LLM instance for conversation summarization.
+# Create an LLM instance for conversation summarization
 summary_llm = ChatOpenAI(model_name="gpt-4o", temperature=0)
 
 # --- Helper Functions ---
@@ -104,7 +106,7 @@ def get_chat_history(session_id: str) -> PostgresChatMessageHistory:
 
 def get_conversation_context(session_id: str):
     """
-    Return a list of message objects representing the conversation context.
+    Return a list of messages representing the conversation context.
     If a summary is available, prepend it as a system message.
     """
     chat_history = get_chat_history(session_id)
@@ -123,7 +125,8 @@ def get_agent_input(session_id: str) -> str:
     """
     conversation = get_conversation_context(session_id)
     context_str = "\n".join(
-        f"{msg.__class__.__name__.replace('Message','')}: {msg.content}" for msg in conversation
+        f"{msg.__class__.__name__.replace('Message','')}: {msg.content}" 
+        for msg in conversation
     )
     return context_str
 
@@ -153,10 +156,12 @@ chat_agent = Agent(
         temperature=0.7,
     ),
     instructions=(
-        "You are a helpful assistant. Based on the conversation context provided, produce a clear and helpful reply to the latest user message. "
-        "Return your answer as a JSON object with two keys: 'message' and 'sources'. 'message' should be your reply text, and 'sources' should be a list of objects, each containing 'name', 'link', and 'id'. "
-        "Include sources only if you have used the query tool to retrieve relevant information; otherwise, return an empty list for 'sources'."
-        "If not section info, search the interent for credible recourses and put their urls "
+        "You are a helpful assistant. Based on the conversation context provided, produce a clear and helpful reply "
+        "to the latest user message. Return your answer as a JSON object with two keys: 'message' and 'sources'. "
+        "'message' should be your reply text, and 'sources' should be a list of objects, each containing 'name', 'link', and 'id'. "
+        "Include sources only if you have used the query tool to retrieve relevant information; otherwise, return an "
+        "empty list for 'sources'. If you cannot find relevant section info, search the internet for credible resources "
+        "and return their URLs."
     )
 )
 
@@ -165,56 +170,85 @@ async def run_chat_agent(prompt: str) -> ChatReplyOutput:
     return result.final_output
 
 # --- Pydantic Models for Chat Endpoints ---
+
+# ChatCreateRequest now has subtopic_id as optional
 class ChatCreateRequest(BaseModel):
     message: str
+    subtopic_id: Optional[str] = None
 
+# ChatMessageRequest also has subtopic_id as optional
 class ChatMessageRequest(BaseModel):
     session_id: str
     message: str
+    subtopic_id: Optional[str] = None
 
 # --- Endpoint: Create a New Chat Session ---
 @router.post("/chat/create")
 async def create_chat(chat_request: ChatCreateRequest):
     try:
-        # Generate a new session id and get chat history.
+        # Generate a new session id and get chat history
         session_id = str(uuid.uuid4())
         chat_history = get_chat_history(session_id)
         
-        # Initialize conversation summary memory.
+        # Initialize conversation summary memory
         summary_memories[session_id] = ConversationSummaryBufferMemory(
             llm=summary_llm,
             memory_key="summary",
             return_messages=True
         )
         
-        # Add a welcome system message if history is empty.
+        # Add a welcome system message if history is empty
         if not chat_history.messages:
-            system_msg = SystemMessage(content="Welcome to the chat!")
+            system_msg = SystemMessage(content="")
             chat_history.add_messages([system_msg])
             summary_memories[session_id].save_context(
                 {"input": system_msg.content},
                 {"output": system_msg.content}
             )
         
-        # Append the user's starting message.
-        user_message = HumanMessage(content=chat_request.message)
+        # Check if the user passed a subtopic_id and fetch subtopic details if present
+        subtopic_prompt = ""
+        if chat_request.subtopic_id:
+            with psycopg.connect(conn_info) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT name, text FROM subtopics WHERE id = %s",
+                        (chat_request.subtopic_id,)
+                    )
+                    subtopic = cursor.fetchone()
+                    if subtopic:
+                        subtopic_name, subtopic_text = subtopic
+                        subtopic_prompt = (
+                            f"Subtopic Info:\n"
+                            f"Name: {subtopic_name}\n"
+                            f"Text: {subtopic_text}\n"
+                        )
+        
+        # Append the user's starting message
+        user_message_content = f"{chat_request.message}"
+        if subtopic_prompt:
+            # Optionally, add subtopic info to the start of user's message or keep it separate
+            user_message_content = f"{chat_request.message}"
+
+        user_message = HumanMessage(content=user_message_content)
         chat_history.add_messages([user_message])
         summary_memories[session_id].save_context(
-            {"input": chat_request.message},
+            {"input": user_message_content},
             {"output": ""}
         )
         
-        # Build conversation context and create the prompt.
+        # Build conversation context and create the prompt
         context_text = get_agent_input(session_id)
-        prompt = f"{context_text}\nUser: {chat_request.message}"
+        prompt = f"{context_text}\nUser: {user_message_content}"
         
-        # Run the chat agent.
+        # Run the chat agent
         ai_reply_output = await run_chat_agent(prompt)
-        # Only append the plain text reply to the conversation history.
         reply_message = AIMessage(content=ai_reply_output.message)
+        
+        # Append the AI reply to the conversation history
         chat_history.add_messages([reply_message])
         summary_memories[session_id].save_context(
-            {"input": chat_request.message},
+            {"input": user_message_content},
             {"output": ai_reply_output.message}
         )
         
@@ -236,7 +270,7 @@ async def chat_message(chat_request: ChatMessageRequest):
         session_id = chat_request.session_id
         chat_history = get_chat_history(session_id)
         
-        # Ensure conversation memory exists.
+        # Ensure conversation memory exists
         if session_id not in summary_memories:
             summary_memories[session_id] = ConversationSummaryBufferMemory(
                 llm=summary_llm,
@@ -244,24 +278,47 @@ async def chat_message(chat_request: ChatMessageRequest):
                 return_messages=True
             )
         
-        # Append the new user message.
-        user_message = HumanMessage(content=chat_request.message)
+        # If subtopic_id was provided, fetch that subtopic and add it to the prompt
+        subtopic_prompt = ""
+        if chat_request.subtopic_id:
+            with psycopg.connect(conn_info) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT name, text FROM subtopics WHERE id = %s",
+                        (chat_request.subtopic_id,)
+                    )
+                    subtopic = cursor.fetchone()
+                    if subtopic:
+                        subtopic_name, subtopic_text = subtopic
+                        subtopic_prompt = (
+                            f"Subtopic Info:\n"
+                            f"Name: {subtopic_name}\n"
+                            f"Text: {subtopic_text}\n"
+                        )
+        
+        # Append the new user message
+        user_message_content = chat_request.message
+        if subtopic_prompt:
+            # Optionally, add subtopic info to the start of user's message
+            user_message_content = f"{chat_request.message}"
+
+        user_message = HumanMessage(content=user_message_content)
         chat_history.add_messages([user_message])
         summary_memories[session_id].save_context(
-            {"input": chat_request.message},
+            {"input": user_message_content},
             {"output": ""}
         )
         
-        # Build updated conversation context.
+        # Build updated conversation context
         context_text = get_agent_input(session_id)
-        prompt = f"{context_text}\nUser: {chat_request.message}"
+        prompt = f"{context_text}\nUser: {user_message_content}"
         
-        # Run the chat agent.
+        # Run the chat agent
         ai_reply_output = await run_chat_agent(prompt)
         reply_message = AIMessage(content=ai_reply_output.message)
         chat_history.add_messages([reply_message])
         summary_memories[session_id].save_context(
-            {"input": chat_request.message},
+            {"input": user_message_content},
             {"output": ai_reply_output.message}
         )
         
@@ -299,18 +356,24 @@ def get_messages(session_id: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 # --- Endpoint: Query Subtopics ---
 class SubtopicQueryRequest(BaseModel):
     query: str
     top_n: int = 3
-    
+
 @router.post("/chat/query_subtopics")
 def query_subtopics(query_request: SubtopicQueryRequest):
     try:
         results = search_similar_subtopics(query_request.query, query_request.top_n)
         formatted_results = [
-            {"id": row[0], "name": row[1], "text": row[2], "topicId": row[3], "similarity": row[4]}
+            {
+                "id": row[0], 
+                "name": row[1], 
+                "text": row[2], 
+                "topicId": row[3], 
+                "similarity": row[4]
+            }
             for row in results
         ]
         return {"results": formatted_results}

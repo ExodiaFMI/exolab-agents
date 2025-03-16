@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Body
 import asyncio
 from dataclasses import dataclass
-from agents import Agent, Runner, ModelSettings
+from agents import Agent, Runner, ModelSettings, WebSearchTool
 from agents.agent_output import AgentOutputSchema
 from pydantic import BaseModel
 from aiolimiter import AsyncLimiter  # Import the rate limiter
@@ -26,7 +26,8 @@ agent_explanations = Agent(
     name="Subtopic Explainer",
     output_type=SubtopicExplanationOutput,
     model="gpt-4o",
-    model_settings=ModelSettings(temperature=0.7),
+    tools=[WebSearchTool()],
+    model_settings=ModelSettings(temperature=0.1),
     instructions='''Write a detailed explanation of the given subtopic in Markdown format.
    
               Explain in detail what this subtopic is about, but **do not** discuss the other subtopics of the topic (they will be provided).
@@ -49,58 +50,37 @@ Output the result as a JSON object with "topic", "subtopic", and "explanation".'
 )
 
 # Create an AsyncLimiter instance.
-# For example, if you want to allow 60 requests per minute:
 limiter = AsyncLimiter(max_rate=60, time_period=60)
 
-# Async function to generate an explanation for a given subtopic.
-async def generate_explanation(topic: str, subtopic: str, other_subtopics: list[str]) -> SubtopicExplanationOutput:
-    """Generate a detailed explanation for a given subtopic while avoiding other subtopics."""
+# Updated function to generate an explanation now accepts a resources parameter.
+async def generate_explanation(topic: str, subtopic: str, other_subtopics: list[str], resources: list[str]) -> SubtopicExplanationOutput:
+    """Generate a detailed explanation for a given subtopic while avoiding other subtopics.
+    Resources are also included in the prompt context."""
     prompt_context = f"""
     Topic: {topic}
     Subtopic: {subtopic}
     Other Subtopics: {', '.join(other_subtopics)}
+    Resources: {', '.join(resources)}
     """
-    # Acquire the rate limiter before making the API call.
     async with limiter:
         result = await Runner.run(agent_explanations, prompt_context)
     return result.final_output
 
-# Async function to redact an explanation based on a user prompt.
-async def redact_explanation(
-    topic: str,
-    subtopic: str,
-    explanation: str,
-    user_prompt: str
-) -> SubtopicExplanationOutput:
-    """Redact the given explanation by applying only the change specified in the user prompt."""
-    prompt_context = f"""
-    Topic: {topic}
-    Subtopic: {subtopic}
-    Original Explanation: {explanation}
-    
-    User Prompt: {user_prompt}
-    
-    Revise the explanation by modifying only the part requested by the user, leaving the rest unchanged.
-    """
-    # Acquire the rate limiter before making the API call.
-    async with limiter:
-        result = await Runner.run(agent_explanation_redactor, prompt_context)
-    return result.final_output
-
-# Helper function to run explanation generation in parallel.
-async def run_explanation_generation(subtopics_list: list[LectureSubtopicsOutputModel]) -> list[SubtopicExplanationOutput]:
-    """Run explanation generation in parallel for all subtopics."""
+# Helper function updated to accept resources.
+async def run_explanation_generation(subtopics_list: list[LectureSubtopicsOutputModel], resources: list[str]) -> list[SubtopicExplanationOutput]:
+    """Run explanation generation in parallel for all subtopics, passing the resources for each request."""
     tasks = [
-        generate_explanation(item.topic, sub, item.subtopics)
+        generate_explanation(item.topic, sub, item.subtopics, resources)
         for item in subtopics_list
         for sub in item.subtopics
     ]
     results = await asyncio.gather(*tasks)
     return results
 
-# Define a request body model that accepts a list of lecture subtopics.
+# Updated request body model to include resources.
 class ExplanationRequest(BaseModel):
     data: list[LectureSubtopicsOutputModel]
+    resources: list[str] = []
 
     class Config:
         schema_extra = {
@@ -113,11 +93,15 @@ class ExplanationRequest(BaseModel):
                             "The three main tenets of cell theory"
                         ]
                     }
+                ],
+                "resources": [
+                    "Chapter 1 of Biology Textbook",
+                    "Relevant research paper on cell theory"
                 ]
             }
         }
 
-# Define a new request body model for redacting an explanation.
+# The redaction request model remains unchanged.
 class RedactExplanationRequest(BaseModel):
     topic: str
     subtopic: str
@@ -160,11 +144,11 @@ class RedactExplanationRequest(BaseModel):
              })
 async def generate_subtopic_explanations(data: ExplanationRequest = Body(...)):
     """
-    Generate detailed explanations for each subtopic provided in the request.
+    Generate detailed explanations for each subtopic provided in the request,
+    taking into account any additional resources provided.
     """
     try:
-        explanations = await run_explanation_generation(data.data)
-        # Convert each explanation dataclass to a dict for JSON serialization.
+        explanations = await run_explanation_generation(data.data, data.resources)
         return {"explanations": [exp.__dict__ for exp in explanations]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -186,27 +170,9 @@ async def generate_subtopic_explanations(data: ExplanationRequest = Body(...)):
              })
 async def redact_explanation_endpoint(request: RedactExplanationRequest = Body(...)):
     """
-    Redact an existing explanation based on a user prompt. The endpoint receives the topic, subtopic, original explanation,
-    and a prompt that indicates what change is desired. It returns a revised explanation where only the specified part is updated.
-
-    **Request Example:**
-    ```json
-    {
-        "topic": "Cell theory/definition of life",
-        "subtopic": "Historical development of cell theory",
-        "explanation": "The historical development of cell theory is a critical component in understanding the foundations of biology. ...",
-        "user_prompt": "Please update the explanation to include more details about the contributions of Robert Hooke."
-    }
-    ```
-
-    **Response Example:**
-    ```json
-    {
-        "topic": "Cell theory/definition of life",
-        "subtopic": "Historical development of cell theory",
-        "explanation": "Revised explanation text with the updated details about Robert Hooke..."
-    }
-    ```
+    Redact an existing explanation based on a user prompt.
+    The endpoint receives the topic, subtopic, original explanation,
+    and a prompt that indicates what change is desired.
     """
     try:
         result = await redact_explanation(
@@ -215,7 +181,6 @@ async def redact_explanation_endpoint(request: RedactExplanationRequest = Body(.
             explanation=request.explanation,
             user_prompt=request.user_prompt
         )
-        # Return the redacted explanation as a dictionary.
         return result.__dict__
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

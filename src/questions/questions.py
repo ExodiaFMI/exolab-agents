@@ -51,7 +51,7 @@ class QuestionGenerationRequest(BaseModel):
 # This is our FastAPI router for question generation.
 router = APIRouter()
 
-# Define the output data structure for question generation.
+# Define the output data structure for question generation, with 'answers' as a separate list.
 @dataclass
 class QuestionGenerationOutput:
     topic: str
@@ -59,8 +59,9 @@ class QuestionGenerationOutput:
     difficulty: str
     question_type: str
     question: str
-    correct_answer: str
-    explanation: str  # explanation of the correct answer
+    answers: List[str]  # If question_type is multiple choice, put all options here. Otherwise empty.
+    correct_answer: str  # If question_type is Open Answer, leave empty.
+    explanation: str     # Explanation of the correct answer (or the reasoning).
 
 # Set up the agent for generating questions.
 agent_questions = Agent(
@@ -69,18 +70,24 @@ agent_questions = Agent(
     model="gpt-4o",
     model_settings=ModelSettings(temperature=0.7),
     instructions='''Write a detailed question on the given subtopic in Markdown format.
+    
+The question should be designed for the provided difficulty level (Easy, Medium, or Hard) and question type (Multiple Choice or Open Answer).
 
-The question should be designed for the provided difficulty level (Easy, Medium, or Hard) and of the specified type (Multiple Choice with options labeled A, B, C, etc. or Open Answer).
+If question_type is "Multiple Choice":
+- Provide a list of possible answers (e.g., "A. ...", "B. ...", etc.) in a JSON array as "answers".
+- Identify the correct answer in "correct_answer" (matching one of the provided options).
+- Include an explanation in "explanation".
 
-Include the following in your output:
-- The question text.
-- The correct answer.
-- An explanation of why the correct answer is correct.
+If question_type is "Open Answer":
+- The "answers" array must be empty (i.e., []).
+- The "correct_answer" field must be an empty string.
+- Still provide an "explanation" field.
 
-Other subtopics will be provided but should not be discussed; focus solely on the current subtopic.
-Additionally, use the provided explanation of the subtopic as context to craft the question.
+Focus solely on the given subtopic and use the provided explanation as context. Do not mention other subtopics.
 
-Output the result as a JSON object with "topic", "subtopic", "difficulty", "question_type", "question", "correct_answer", and "explanation".'''
+Output the result as valid JSON with the following keys:
+"topic", "subtopic", "difficulty", "question_type", "question", "answers", "correct_answer", "explanation".
+'''
 )
 
 async def generate_question(
@@ -145,8 +152,13 @@ async def run_question_generation(
                                          "difficulty": "Easy",
                                          "question_type": "Multiple Choice",
                                          "question": "What is the significance of Robert Hooke's discovery in the context of cell theory?",
+                                         "answers": [
+                                             "A. It was the first observation of cells.",
+                                             "B. He discovered the structure of DNA.",
+                                             "C. He identified the cell nucleus."
+                                         ],
                                          "correct_answer": "A. It was the first observation of cells.",
-                                         "explanation": "Robert Hooke's observation of cork cells marked the first identification of cells, establishing a foundation for cell theory."
+                                         "explanation": "Robert Hooke’s observation of cork marked the first identification of cells, setting a foundation for cell theory."
                                      },
                                      {
                                          "topic": "Cell theory/definition of life",
@@ -154,7 +166,8 @@ async def run_question_generation(
                                          "difficulty": "Medium",
                                          "question_type": "Open Answer",
                                          "question": "Explain the three main tenets of cell theory.",
-                                         "correct_answer": "All living organisms are made of cells, the cell is the basic unit of life, and all cells come from pre-existing cells.",
+                                         "answers": [],
+                                         "correct_answer": "",
                                          "explanation": "These tenets summarize the fundamental principles that form the basis of cell theory."
                                      }
                                  ]
@@ -204,8 +217,13 @@ async def generate_questions(request: QuestionGenerationRequest = Body(...)):
                 "difficulty": "Easy",
                 "question_type": "Multiple Choice",
                 "question": "What is the significance of Robert Hooke's discovery in the context of cell theory?",
+                "answers": [
+                    "A. It was the first observation of cells.",
+                    "B. He discovered the structure of DNA.",
+                    "C. He identified the cell nucleus."
+                ],
                 "correct_answer": "A. It was the first observation of cells.",
-                "explanation": "Robert Hooke's observation of cork cells marked the first identification of cells, establishing a foundation for cell theory."
+                "explanation": "Robert Hooke’s observation of cork marked the first identification of cells, setting a foundation for cell theory."
             },
             {
                 "topic": "Cell theory/definition of life",
@@ -213,7 +231,8 @@ async def generate_questions(request: QuestionGenerationRequest = Body(...)):
                 "difficulty": "Medium",
                 "question_type": "Open Answer",
                 "question": "Explain the three main tenets of cell theory.",
-                "correct_answer": "All living organisms are made of cells, the cell is the basic unit of life, and all cells come from pre-existing cells.",
+                "answers": [],
+                "correct_answer": "",
                 "explanation": "These tenets summarize the fundamental principles that form the basis of cell theory."
             }
         ]
@@ -222,9 +241,12 @@ async def generate_questions(request: QuestionGenerationRequest = Body(...)):
     """
     try:
         # Build explanation_map from request.explanations
-        explanation_map = { (item.topic, item.subtopic): item.explanation for item in request.explanations }
+        explanation_map = {(item.topic, item.subtopic): item.explanation for item in request.explanations}
+
+        # Generate the questions
         questions = await run_question_generation(request.data, explanation_map)
-        # Convert each question dataclass to a dict for JSON serialization.
+
+        # Convert each question dataclass to a dict for JSON serialization
         return {"questions": [q.__dict__ for q in questions]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

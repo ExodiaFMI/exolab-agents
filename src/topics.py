@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Body
-from agents import Agent, Runner, ModelSettings, RunContextWrapper
+from agents import Agent, Runner, ModelSettings, RunContextWrapper, WebSearchTool
 from openai.types.responses import ResponseTextDeltaEvent
 import openai
 import asyncio
@@ -17,7 +17,7 @@ router = APIRouter()
 class CourseContentOutput:
     topics: list[str]
     description: str
-    reading_materials: list[str]
+    recourses: list[str]
 
 output_schema = AgentOutputSchema(output_type=CourseContentOutput)
 
@@ -26,6 +26,7 @@ agent = Agent(
     name="Course Schedule Extractor", 
     output_type=CourseContentOutput,
     model="gpt-4o",
+    tools=[WebSearchTool()],
     model_settings=ModelSettings(
         temperature=0.1,
     ),
@@ -33,7 +34,8 @@ agent = Agent(
 1. Lecture topics as a JSON list of strings (exclude exams, holidays, non-course material, course introductions, discussion events, etc.).
 2. A short description of the course summarizing its content.
 3. Reading materials as a JSON array of strings containing recommended texts.
-Output the result as a JSON object with the keys "topics", "description", and "reading_materials".'''
+GIVE MAX 10 topics.
+Output the result as a JSON object with the keys "topics", "description", and "recourses".'''
 )
 
 # Updated request body model with an example including the additional details.
@@ -70,7 +72,7 @@ async def run_course_agent(content: str):
                                      "Nucleic Acids"
                                  ],
                                  "description": "This course covers the fundamentals of biology and chemistry in living organisms.",
-                                 "reading_materials": [
+                                 "recourses": [
                                      "Biology 101",
                                      "Chemistry Basics"
                                  ]
@@ -99,7 +101,7 @@ async def extract_lecture_topics(data: LectureContent = Body(...)):
             "Nucleic Acids"
         ],
         "description": "This course covers the fundamentals of biology and chemistry in living organisms.",
-        "reading_materials": [
+        "recourses": [
             "Biology 101",
             "Chemistry Basics"
         ]
@@ -109,9 +111,9 @@ async def extract_lecture_topics(data: LectureContent = Body(...)):
     try:
         output = await run_course_agent(data.content)
         return {
-            "topics": output.topics,
+            "topics": output.topics[:10],
             "description": output.description,
-            "reading_materials": output.reading_materials
+            "recourses": output.recourses
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
